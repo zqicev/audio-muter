@@ -49,11 +49,10 @@ def perform_update(temp_zip: str, app_dir: str):
     """
     tmpdir = tempfile.mkdtemp()
     try:
-        # Распаковываем zip во временную папку
         with ZipFile(temp_zip, 'r') as zipf:
             zipf.extractall(tmpdir)
 
-        # Ищем новый exe и _internal
+        # ищем новый exe и _internal
         new_exe = None
         new_internal = None
         for root, dirs, files in os.walk(tmpdir):
@@ -65,56 +64,51 @@ def perform_update(temp_zip: str, app_dir: str):
                     new_internal = os.path.join(root, d)
 
         if not new_exe or not new_internal:
-            print("[ERROR] Не удалось найти AudioMuter.exe или _internal в zip")
+            print("[ERROR] Не найден AudioMuter.exe или _internal в zip")
             return
 
-        # Создаем временный backup старой версии
+        # временный backup
         backup_dir = app_dir + "_old"
-        try:
-            if os.path.exists(backup_dir):
-                shutil.rmtree(backup_dir)
-            os.makedirs(backup_dir, exist_ok=True)
-            # Перемещаем старые файлы exe и _internal в backup
-            old_exe = os.path.join(app_dir, "AudioMuter.exe")
-            old_internal = os.path.join(app_dir, "_internal")
-            if os.path.exists(old_exe):
-                shutil.move(old_exe, backup_dir)
-            if os.path.exists(old_internal):
-                shutil.move(old_internal, backup_dir)
-        except Exception as e:
-            print(f"[ERROR] Не удалось создать backup старого приложения: {e}")
-            return
+        if os.path.exists(backup_dir):
+            shutil.rmtree(backup_dir)
+        os.makedirs(backup_dir, exist_ok=True)
+
+        old_exe = os.path.join(app_dir, "AudioMuter.exe")
+        old_internal = os.path.join(app_dir, "_internal")
+        if os.path.exists(old_exe):
+            shutil.move(old_exe, backup_dir)
+        if os.path.exists(old_internal):
+            shutil.move(old_internal, backup_dir)
 
         # Копируем новые файлы на место старых
         try:
-            shutil.move(new_exe, os.path.join(app_dir, "AudioMuter.exe"))
-            shutil.move(new_internal, os.path.join(app_dir, "_internal"))
+            shutil.copy2(new_exe, os.path.join(app_dir, "AudioMuter.exe"))
+
+            dst_internal = os.path.join(app_dir, "_internal")
+            if os.path.exists(dst_internal):
+                shutil.rmtree(dst_internal)
+            shutil.copytree(new_internal, dst_internal)
+
         except Exception as e:
-            print(f"[ERROR] Не удалось заменить старые файлы новыми: {e}")
-            # Откат
+            print(f"[ERROR] Не удалось скопировать новые файлы: {e}")
+            # откат
             if os.path.exists(os.path.join(app_dir, "AudioMuter.exe")):
                 os.remove(os.path.join(app_dir, "AudioMuter.exe"))
             if os.path.exists(os.path.join(app_dir, "_internal")):
                 shutil.rmtree(os.path.join(app_dir, "_internal"))
-            # Восстанавливаем backup
             if os.path.exists(backup_dir):
                 for f in os.listdir(backup_dir):
                     shutil.move(os.path.join(backup_dir, f), app_dir)
             return
 
-        # Удаляем backup
-        try:
-            shutil.rmtree(backup_dir)
-        except Exception:
-            pass
+        shutil.rmtree(backup_dir, ignore_errors=True)
 
-        # Перезапуск нового приложения
+        # перезапуск нового приложения
         new_exe_path = os.path.join(app_dir, "AudioMuter.exe")
         subprocess.Popen([new_exe_path], close_fds=True)
         sys.exit(0)
 
     finally:
-        # Удаляем временные файлы
         shutil.rmtree(tmpdir, ignore_errors=True)
         if os.path.exists(temp_zip):
             os.remove(temp_zip)

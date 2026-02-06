@@ -27,7 +27,7 @@ from updater import (
 # КОНФИГУРАЦИЯ АПДЕЙТА
 # =========================
 
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 GITHUB_REPO = "zqicev/audio-muter"
 
 # =========================
