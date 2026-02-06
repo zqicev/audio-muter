@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QLabel,
     QCheckBox,
-    QListWidgetItem
+    QListWidgetItem,
+    QSlider
 )
 from PyQt6.QtCore import Qt
 
@@ -85,6 +86,17 @@ class App(QWidget):
         self.selective_checkbox = QCheckBox("Глушить только выбранные процессы")
         self.selective_checkbox.stateChanged.connect(self.toggle_target_list)
 
+        self.delay_label = QLabel("Задержка возврата звука: 1 сек")
+        self.delay_slider = QSlider(Qt.Orientation.Horizontal)
+        self.delay_slider.setMinimum(1)
+        self.delay_slider.setMaximum(30)
+        self.delay_slider.setValue(1)
+        self.delay_slider.valueChanged.connect(
+            lambda v: self.delay_label.setText(
+                f"Задержка возврата звука: {v} сек"
+            )
+        )
+
         refresh_btn = QPushButton("🔄 Обновить список")
         start_btn = QPushButton("▶ Начать")
         stop_btn = QPushButton("⏹ Остановить")
@@ -96,6 +108,8 @@ class App(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Источник (кого отслеживаем):"))
         layout.addWidget(self.source_list)
+        layout.addWidget(self.delay_label)
+        layout.addWidget(self.delay_slider)
         layout.addWidget(self.ducking_checkbox)
         layout.addWidget(self.selective_checkbox)
         layout.addWidget(QLabel("Кого глушить:"))
@@ -149,7 +163,8 @@ class App(QWidget):
         self.controller.start(
             source_pid=source_pid,
             use_ducking=self.ducking_checkbox.isChecked(),
-            target_pids=target_pids
+            target_pids=target_pids,
+            restore_delay=self.delay_slider.value()
         )
 
         mode = "ducking" if self.ducking_checkbox.isChecked() else "mute"

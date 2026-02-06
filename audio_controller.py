@@ -17,11 +17,11 @@ class AudioController:
         self.use_ducking = False
         self.duck_volume = 0.2
 
-        # если None - глушим всё
-        # если set(pid) - глушим только их
         self.target_pids = None
+        self.restore_delay = 1
 
         self._original_volumes = {}
+        self._restore_timer_start = None
 
     def _get_sessions(self):
         return AudioUtilities.GetAllSessions()
@@ -29,10 +29,8 @@ class AudioController:
     def _should_affect(self, pid: int) -> bool:
         if pid == self.source_pid:
             return False
-
         if self.target_pids is None:
             return True
-
         return pid in self.target_pids
 
     def _apply_effect(self, active: bool):
@@ -60,40 +58,61 @@ class AudioController:
         if not active:
             self._original_volumes.clear()
 
+    def _is_source_playing(self) -> bool:
+        for session in self._get_sessions():
+            if not session.Process:
+                continue
+            if session.Process.pid != self.source_pid:
+                continue
+
+            meter = session._ctl.QueryInterface(IAudioMeterInformation)
+            if meter.GetPeakValue() > self.threshold:
+                return True
+        return False
+
     def monitor(self):
         self.running = True
         was_playing = False
 
         while self.running:
-            playing = False
+            playing = self._is_source_playing()
 
-            for session in self._get_sessions():
-                if not session.Process:
-                    continue
-                if session.Process.pid != self.source_pid:
-                    continue
+            if playing:
+                self._restore_timer_start = None
+                if not was_playing:
+                    self._apply_effect(True)
 
-                meter = session._ctl.QueryInterface(IAudioMeterInformation)
-                if meter.GetPeakValue() > self.threshold:
-                    playing = True
-                    break
+            else:
+                if was_playing:
+                    self._restore_timer_start = time.time()
 
-            if playing and not was_playing:
-                self._apply_effect(True)
-
-            if not playing and was_playing:
-                self._apply_effect(False)
+                if self._restore_timer_start is not None:
+                    elapsed = time.time() - self._restore_timer_start
+                    if elapsed >= self.restore_delay:
+                        # финальная проверка
+                        if not self._is_source_playing():
+                            self._apply_effect(False)
+                            self._restore_timer_start = None
 
             was_playing = playing
             time.sleep(0.1)
 
-    def start(self, source_pid: int, use_ducking: bool, target_pids: set | None):
+    def start(
+        self,
+        source_pid: int,
+        use_ducking: bool,
+        target_pids: set | None,
+        restore_delay: int
+    ):
         self.source_pid = source_pid
         self.use_ducking = use_ducking
         self.target_pids = target_pids
+        self.restore_delay = restore_delay
 
+        self.running = True
         threading.Thread(target=self.monitor, daemon=True).start()
 
     def stop(self):
         self.running = False
+        self._restore_timer_start = None
         self._apply_effect(False)
