@@ -27,7 +27,7 @@ from updater import (
 # КОНФИГУРАЦИЯ АПДЕЙТА
 # =========================
 
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 GITHUB_REPO = "zqicev/audio-muter"
 
 # =========================
@@ -68,7 +68,7 @@ def auto_update():
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Audio Muter")
+        self.setWindowTitle("Audio Muter v" + APP_VERSION)
         self.resize(460, 650)
 
         self.setWindowIcon(QIcon("icon.ico"))
