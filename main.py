@@ -24,139 +24,13 @@ from audio_controller import AudioController
 import requests
 
 # =========================
-# КОНФИГУРАЦИЯ АПДЕЙТА
-# =========================
-
-APP_VERSION = "1.3.1"
-GITHUB_REPO = "zqicev/audio-muter"
-
-# =========================
-# АПДЕЙТЕР
-# =========================
-
-def _version_tuple(v: str):
-    return tuple(map(int, v.strip("v").split(".")))
-
-def get_latest_release(repo: str):
-    url = f"https://api.github.com/repos/{repo}/releases/latest"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
-    return r.json()
-
-def check_for_update(repo: str, current_version: str):
-    release = get_latest_release(repo)
-    latest_version = release["tag_name"]
-    if _version_tuple(latest_version) <= _version_tuple(current_version):
-        return None
-    for asset in release.get("assets", []):
-        if asset["name"].lower().endswith(".zip"):
-            return {
-                "version": latest_version,
-                "url": asset["browser_download_url"]
-            }
-    return None
-
-def download_update(url: str) -> str:
-    r = requests.get(url, stream=True, timeout=30)
-    r.raise_for_status()
-    fd, temp_path = tempfile.mkstemp(suffix=".zip")
-    with os.fdopen(fd, "wb") as f:
-        for chunk in r.iter_content(8192):
-            if chunk:
-                f.write(chunk)
-    return temp_path
-
-def perform_update(temp_zip: str, app_dir: str):
-    """Распаковываем zip и заменяем старую версию"""
-    tmpdir = tempfile.mkdtemp()
-    with ZipFile(temp_zip, 'r') as zipf:
-        zipf.extractall(tmpdir)
-
-    new_exe = None
-    new_internal = None
-    for root, dirs, files in os.walk(tmpdir):
-        for file in files:
-            if file.lower() == "audiomuter.exe":
-                new_exe = os.path.join(root, file)
-        for d in dirs:
-            if d.lower() == "_internal":
-                new_internal = os.path.join(root, d)
-
-    if not new_exe or not new_internal:
-        print("[ERROR] Не найден AudioMuter.exe или _internal в zip")
-        return
-
-    # создаем временный апдейтер
-    updater_path = os.path.join(tempfile.gettempdir(), "updater.exe")
-    updater_code = f"""
-import os
-import sys
-import shutil
-import subprocess
-import time
-
-temp_exe = r"{new_exe}"
-temp_internal = r"{new_internal}"
-app_dir = r"{app_dir}"
-
-time.sleep(1)
-backup_dir = app_dir + "_old"
-try:
-    if os.path.exists(backup_dir):
-        shutil.rmtree(backup_dir)
-    shutil.move(app_dir, backup_dir)
-except Exception as e:
-    print("Не удалось переместить старое приложение:", e)
-    sys.exit(1)
-
-try:
-    os.makedirs(app_dir, exist_ok=True)
-    shutil.move(temp_exe, os.path.join(app_dir, "AudioMuter.exe"))
-    shutil.move(temp_internal, os.path.join(app_dir, "_internal"))
-except Exception as e:
-    print("Не удалось переместить новые файлы:", e)
-    if os.path.exists(app_dir):
-        shutil.rmtree(app_dir)
-    shutil.move(backup_dir, app_dir)
-    sys.exit(1)
-
-try:
-    shutil.rmtree(backup_dir)
-except Exception:
-    pass
-
-subprocess.Popen([os.path.join(app_dir, "AudioMuter.exe")])
-sys.exit(0)
-"""
-    # сохраняем updater как exe через pyinstaller или py2exe, но если exe уже standalone, можно сделать bat
-    updater_bat = os.path.join(tempfile.gettempdir(), "updater.bat")
-    with open(updater_bat, "w", encoding="utf-8") as f:
-        f.write(f'@echo off\npython - <<END\n{updater_code}\nEND\n')
-
-    subprocess.Popen([updater_bat], shell=True)
-    sys.exit(0)
-
-def auto_update():
-    try:
-        update = check_for_update(GITHUB_REPO, APP_VERSION)
-        if not update:
-            return
-
-        temp_zip = download_update(update["url"])
-        app_dir = os.path.dirname(sys.executable)
-        perform_update(temp_zip, app_dir)
-
-    except Exception as e:
-        print("Update error:", e)
-
-# =========================
 # GUI
 # =========================
 
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Audio Muter v"+APP_VERSION)
+        self.setWindowTitle("Audio Muter")
         self.setWindowIcon(QIcon("icon.ico"))
         self.resize(460, 650)
 
@@ -258,7 +132,6 @@ class App(QWidget):
 # =========================
 
 if __name__ == "__main__":
-    auto_update()
     app = QApplication(sys.argv)
     window = App()
     window.show()
