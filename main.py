@@ -27,7 +27,7 @@ from updater import (
 # КОНФИГУРАЦИЯ АПДЕЙТА
 # =========================
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.2"
 GITHUB_REPO = "zqicev/audio-muter"
 
 # =========================
@@ -50,16 +50,15 @@ def auto_update():
         if not update:
             return
 
-        # скачиваем zip
+        print(f"[INFO] Найден апдейт: {update['version']}")
         temp_zip = download_update(update["url"])
 
-        # выполняем обновление текущей папки приложения
-        # sys.executable → путь к текущему exe
-        app_dir = os.path.dirname(sys.executable)
+        app_dir = os.path.dirname(sys.executable)  # папка текущего exe
         perform_update(temp_zip, app_dir)
 
     except Exception as e:
         print("Update error:", e)
+
 
 
 # =========================
