@@ -1,5 +1,9 @@
 import sys
+import os
 import subprocess
+import tempfile
+import shutil
+from zipfile import ZipFile
 
 from PyQt6.QtWidgets import (
     QApplication,
@@ -17,32 +21,120 @@ from PyQt6.QtGui import QIcon
 
 from pycaw.pycaw import AudioUtilities
 from audio_controller import AudioController
-from updater import (
-    check_for_update,
-    download_update,
-    perform_update
-)
+import requests
 
 # =========================
 # КОНФИГУРАЦИЯ АПДЕЙТА
 # =========================
 
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.3.0"
 GITHUB_REPO = "zqicev/audio-muter"
 
 # =========================
-# АВТООБНОВЛЕНИЕ
+# АПДЕЙТЕР
 # =========================
 
-def handle_update_mode():
-    if "--update" not in sys.argv:
+def _version_tuple(v: str):
+    return tuple(map(int, v.strip("v").split(".")))
+
+def get_latest_release(repo: str):
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    r = requests.get(url, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+def check_for_update(repo: str, current_version: str):
+    release = get_latest_release(repo)
+    latest_version = release["tag_name"]
+    if _version_tuple(latest_version) <= _version_tuple(current_version):
+        return None
+    for asset in release.get("assets", []):
+        if asset["name"].lower().endswith(".zip"):
+            return {
+                "version": latest_version,
+                "url": asset["browser_download_url"]
+            }
+    return None
+
+def download_update(url: str) -> str:
+    r = requests.get(url, stream=True, timeout=30)
+    r.raise_for_status()
+    fd, temp_path = tempfile.mkstemp(suffix=".zip")
+    with os.fdopen(fd, "wb") as f:
+        for chunk in r.iter_content(8192):
+            if chunk:
+                f.write(chunk)
+    return temp_path
+
+def perform_update(temp_zip: str, app_dir: str):
+    """Распаковываем zip и заменяем старую версию"""
+    tmpdir = tempfile.mkdtemp()
+    with ZipFile(temp_zip, 'r') as zipf:
+        zipf.extractall(tmpdir)
+
+    new_exe = None
+    new_internal = None
+    for root, dirs, files in os.walk(tmpdir):
+        for file in files:
+            if file.lower() == "audiomuter.exe":
+                new_exe = os.path.join(root, file)
+        for d in dirs:
+            if d.lower() == "_internal":
+                new_internal = os.path.join(root, d)
+
+    if not new_exe or not new_internal:
+        print("[ERROR] Не найден AudioMuter.exe или _internal в zip")
         return
 
-    idx = sys.argv.index("--update")
-    temp_exe = sys.argv[idx + 1]
-    perform_update(temp_exe, sys.executable)
-    sys.exit(0)
+    # создаем временный апдейтер
+    updater_path = os.path.join(tempfile.gettempdir(), "updater.exe")
+    updater_code = f"""
+import os
+import sys
+import shutil
+import subprocess
+import time
 
+temp_exe = r"{new_exe}"
+temp_internal = r"{new_internal}"
+app_dir = r"{app_dir}"
+
+time.sleep(1)
+backup_dir = app_dir + "_old"
+try:
+    if os.path.exists(backup_dir):
+        shutil.rmtree(backup_dir)
+    shutil.move(app_dir, backup_dir)
+except Exception as e:
+    print("Не удалось переместить старое приложение:", e)
+    sys.exit(1)
+
+try:
+    os.makedirs(app_dir, exist_ok=True)
+    shutil.move(temp_exe, os.path.join(app_dir, "AudioMuter.exe"))
+    shutil.move(temp_internal, os.path.join(app_dir, "_internal"))
+except Exception as e:
+    print("Не удалось переместить новые файлы:", e)
+    if os.path.exists(app_dir):
+        shutil.rmtree(app_dir)
+    shutil.move(backup_dir, app_dir)
+    sys.exit(1)
+
+try:
+    shutil.rmtree(backup_dir)
+except Exception:
+    pass
+
+subprocess.Popen([os.path.join(app_dir, "AudioMuter.exe")])
+sys.exit(0)
+"""
+    # сохраняем updater как exe через pyinstaller или py2exe, но если exe уже standalone, можно сделать bat
+    updater_bat = os.path.join(tempfile.gettempdir(), "updater.bat")
+    with open(updater_bat, "w", encoding="utf-8") as f:
+        f.write(f'@echo off\npython - <<END\n{updater_code}\nEND\n')
+
+    subprocess.Popen([updater_bat], shell=True)
+    sys.exit(0)
 
 def auto_update():
     try:
@@ -50,16 +142,12 @@ def auto_update():
         if not update:
             return
 
-        print(f"[INFO] Найден апдейт: {update['version']}")
         temp_zip = download_update(update["url"])
-
-        app_dir = os.path.dirname(sys.executable)  # папка текущего exe
+        app_dir = os.path.dirname(sys.executable)
         perform_update(temp_zip, app_dir)
 
     except Exception as e:
         print("Update error:", e)
-
-
 
 # =========================
 # GUI
@@ -68,10 +156,9 @@ def auto_update():
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Audio Muter v" + APP_VERSION)
-        self.resize(460, 650)
-
+        self.setWindowTitle("Audio Muter")
         self.setWindowIcon(QIcon("icon.ico"))
+        self.resize(460, 650)
 
         self.controller = AudioController()
 
@@ -92,9 +179,7 @@ class App(QWidget):
         self.delay_slider.setMaximum(30)
         self.delay_slider.setValue(0)
         self.delay_slider.valueChanged.connect(
-            lambda v: self.delay_label.setText(
-                f"Задержка возврата звука: {v} сек"
-            )
+            lambda v: self.delay_label.setText(f"Задержка возврата звука: {v} сек")
         )
 
         refresh_btn = QPushButton("🔄 Обновить список")
@@ -130,15 +215,12 @@ class App(QWidget):
     def refresh(self):
         self.source_list.clear()
         self.target_list.clear()
-
         processes = {}
         for session in AudioUtilities.GetAllSessions():
             if session.Process:
                 processes[session.Process.pid] = session.Process.name()
-
         for pid, name in processes.items():
             self.source_list.addItem(f"{pid} - {name}")
-
             item = QListWidgetItem(f"{pid} - {name}")
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Unchecked)
@@ -148,9 +230,7 @@ class App(QWidget):
         source_item = self.source_list.currentItem()
         if not source_item:
             return
-
         source_pid = int(source_item.text().split(" - ")[0])
-
         target_pids = None
         if self.selective_checkbox.isChecked():
             target_pids = set()
@@ -159,34 +239,26 @@ class App(QWidget):
                 if item.checkState() == Qt.CheckState.Checked:
                     pid = int(item.text().split(" - ")[0])
                     target_pids.add(pid)
-
         self.controller.start(
             source_pid=source_pid,
             use_ducking=self.ducking_checkbox.isChecked(),
             target_pids=target_pids,
             restore_delay=self.delay_slider.value()
         )
-
         mode = "ducking" if self.ducking_checkbox.isChecked() else "mute"
         scope = "выборочно" if target_pids is not None else "всё"
-
-        self.status.setText(
-            f"Статус: PID {source_pid}, режим: {mode}, глушить: {scope}"
-        )
+        self.status.setText(f"Статус: PID {source_pid}, режим: {mode}, глушить: {scope}")
 
     def stop(self):
         self.controller.stop()
         self.status.setText("Статус: остановлено")
-
 
 # =========================
 # ENTRY POINT
 # =========================
 
 if __name__ == "__main__":
-    handle_update_mode()
     auto_update()
-
     app = QApplication(sys.argv)
     window = App()
     window.show()
