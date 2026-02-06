@@ -49,15 +49,13 @@ def auto_update():
         if not update:
             return
 
-        temp_exe = download_update(update["url"])
+        # скачиваем zip
+        temp_zip = download_update(update["url"])
 
-        subprocess.Popen([
-            sys.executable,
-            "--update",
-            temp_exe
-        ])
-
-        sys.exit(0)
+        # выполняем обновление текущей папки приложения
+        # sys.executable → путь к текущему exe
+        app_dir = os.path.dirname(sys.executable)
+        perform_update(temp_zip, app_dir)
 
     except Exception as e:
         print("Update error:", e)
