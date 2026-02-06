@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QSlider
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 
 from pycaw.pycaw import AudioUtilities
 from audio_controller import AudioController
@@ -68,8 +69,10 @@ def auto_update():
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Audio Focus Controller")
+        self.setWindowTitle("Audio Muter")
         self.resize(460, 650)
+
+        self.setWindowIcon(QIcon("icon.ico"))
 
         self.controller = AudioController()
 
@@ -78,17 +81,17 @@ class App(QWidget):
 
         self.status = QLabel("Статус: остановлено")
 
-        self.ducking_checkbox = QCheckBox("Ducking (делать тише)")
+        self.ducking_checkbox = QCheckBox("Дакинг - делать звук тише")
         self.ducking_checkbox.setChecked(True)
 
         self.selective_checkbox = QCheckBox("Глушить только выбранные процессы")
         self.selective_checkbox.stateChanged.connect(self.toggle_target_list)
 
-        self.delay_label = QLabel("Задержка возврата звука: 1 сек")
+        self.delay_label = QLabel("Задержка возврата звука: 0 сек")
         self.delay_slider = QSlider(Qt.Orientation.Horizontal)
-        self.delay_slider.setMinimum(1)
+        self.delay_slider.setMinimum(0)
         self.delay_slider.setMaximum(30)
-        self.delay_slider.setValue(1)
+        self.delay_slider.setValue(0)
         self.delay_slider.valueChanged.connect(
             lambda v: self.delay_label.setText(
                 f"Задержка возврата звука: {v} сек"
