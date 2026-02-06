@@ -156,7 +156,7 @@ def auto_update():
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Audio Muter")
+        self.setWindowTitle("Audio Muter v"+APP_VERSION)
         self.setWindowIcon(QIcon("icon.ico"))
         self.resize(460, 650)
 
