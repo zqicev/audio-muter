@@ -1,0 +1,6 @@
+.env
+release.py
+__pycache__/
+build/
+dist/
+AudioMuter.spec
