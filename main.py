@@ -25,7 +25,7 @@ from updater import (
 # КОНФИГУРАЦИЯ АПДЕЙТА
 # =========================
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 GITHUB_REPO = "zqicev/audio-muter"
 
 # =========================
@@ -79,7 +79,7 @@ class App(QWidget):
 
         self.status = QLabel("Статус: остановлено")
 
-        self.ducking_checkbox = QCheckBox("Ducking (делать тише, а не mute)")
+        self.ducking_checkbox = QCheckBox("Ducking (делать тише)")
         self.ducking_checkbox.setChecked(True)
 
         self.selective_checkbox = QCheckBox("Глушить только выбранные процессы")
@@ -98,7 +98,7 @@ class App(QWidget):
         layout.addWidget(self.source_list)
         layout.addWidget(self.ducking_checkbox)
         layout.addWidget(self.selective_checkbox)
-        layout.addWidget(QLabel("Кого глушим:"))
+        layout.addWidget(QLabel("Кого глушить:"))
         layout.addWidget(self.target_list)
         layout.addWidget(refresh_btn)
         layout.addWidget(start_btn)
@@ -156,7 +156,7 @@ class App(QWidget):
         scope = "выборочно" if target_pids is not None else "всё"
 
         self.status.setText(
-            f"Статус: PID {source_pid}, режим: {mode}, глушим: {scope}"
+            f"Статус: PID {source_pid}, режим: {mode}, глушить: {scope}"
         )
 
     def stop(self):
